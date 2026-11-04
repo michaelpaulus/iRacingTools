@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>IRacingOverlays</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="IRacingOverlays.Tests" />
+    <!-- Country flags, 40 px PNGs from flagcdn.com (public-domain flag designs). -->
+    <None Include="flags\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Car make badges, PNG thumbnails of the brand logos on Wikipedia / Wikimedia Commons (see CarLogos.cs). -->
+    <None Include="logos\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>IRacingBroadcast</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned to the versions the other apps already restored, so building needs no download. -->
+    <PackageReference Include="NAudio" Version="3.3.0" />
+    <!-- 1.x: 2.0 removed the built-in espeak-ng phonemizer that the Kokoro model uses (espeak-ng-data). -->
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="broadcast.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('broadcast.json')" />
+    <None Include="Talk\chatterbox_voice.py" Link="chatterbox_voice.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

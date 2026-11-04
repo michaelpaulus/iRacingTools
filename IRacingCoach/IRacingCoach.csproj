@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>IRacingCoach</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Speech" Version="*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\IRacingVoice\ClaudeCli.cs" Link="ClaudeCli.cs" />
+  </ItemGroup>
+
+</Project>

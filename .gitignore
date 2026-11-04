@@ -55,3 +55,39 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# ---- iRacingTools: kept on this PC, not in git ----
+
+# Per-PC settings (window positions, controller IDs, reference laps). Each app writes defaults when its file is missing.
+IRacingOverlays/overlays.json
+IRacingOverlays.Tests/overlays.json
+IRacingVoice/voice.json
+IRacingCoach/coach.json
+IRacingBroadcast/broadcast.json
+
+# Voice and speech models: large, downloaded on first use
+IRacingVoice/voices/
+IRacingVoice/voice-samples/
+*.onnx
+ggml-*.bin
+
+# Car brand logos: trademarks from Wikipedia, kept local (the overlay shows a text tag without them)
+IRacingOverlays/logos/
+
+# Real iRacing session dumps and telemetry: other drivers' names and IDs
+session-info.yaml
+*.ibt
+*.olap
+*.blap
+
+# Personal logs and scratch output
+perflogs/
+cc-real-log.txt
+.vs/
+
+# Built from your own driving, or other drivers' laps: regenerated or downloaded per car and track
+IRacingVoice/coach/
+IRacingVoice/reference/
+IRacingCoach/corners.json
+IRacingCoach/coach_notes.md
+*.tar.bz2
