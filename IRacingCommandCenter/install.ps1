@@ -38,9 +38,12 @@ if ($running.Count -gt 0) {
     while ((Get-Process -Name 'IRacingCommandCenter' -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
     if (Get-Process -Name 'IRacingCommandCenter' -ErrorAction SilentlyContinue) {
         $answer = Read-Host 'Still running. Force it closed? (OneDrive stays paused if it paused it) [y/N]'
-        if ($answer -notmatch '^(y|yes)$') { Fail 'the Command Center is still running. Nothing was changed.' }
-        Get-Process -Name 'IRacingCommandCenter' | Stop-Process -Force
-        Start-Sleep -Seconds 1
+        # It may have been closed from the tray while the question was up.
+        if (Get-Process -Name 'IRacingCommandCenter' -ErrorAction SilentlyContinue) {
+            if ($answer -notmatch '^(y|yes)$') { Fail 'the Command Center is still running. Nothing was changed.' }
+            Get-Process -Name 'IRacingCommandCenter' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+        }
     }
     Write-Host 'Closed.'
 }
