@@ -54,36 +54,14 @@ public class Config
 
     /// <summary>
     /// The folder holding the IRacingOverlays / IRacingVoice / IRacingCoach projects: above this exe, or the git checkout
-    /// in Documents\source\repos\iRacingTools, or the old Documents\IRacingCoach.
+    /// in Documents\source\repos\iRacingTools.
     /// </summary>
     static string? FindProjectsRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
             if (Directory.Exists(Path.Combine(dir.FullName, "IRacingOverlays"))) return dir.FullName;
-        var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        return new[] { Path.Combine(docs, "source", "repos", "iRacingTools"), Path.Combine(docs, "IRacingCoach") }
-            .FirstOrDefault(root => Directory.Exists(Path.Combine(root, "IRacingOverlays")));
-    }
-
-    /// <summary>
-    /// After the projects move (e.g. into the git checkout), point any helper whose folder is gone at the folder of the
-    /// same name in the projects root. Returns true when something changed.
-    /// </summary>
-    bool RepointMovedApps()
-    {
-        var root = FindProjectsRoot();
-        if (root == null) return false;
-        bool changed = false;
-        foreach (var app in Apps)
-        {
-            if (app.WorkingDir.Length == 0 || Directory.Exists(app.WorkingDir)) continue;
-            var moved = Path.Combine(root, Path.GetFileName(app.WorkingDir.TrimEnd('\\', '/')));
-            if (!Directory.Exists(moved)) continue;
-            Log.Write($"{app.Name}: {app.WorkingDir} is gone; using {moved}");
-            app.WorkingDir = moved;
-            changed = true;
-        }
-        return changed;
+        var repo = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "source", "repos", "iRacingTools");
+        return Directory.Exists(Path.Combine(repo, "IRacingOverlays")) ? repo : null;
     }
 
     public static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "iRacingCommandCenter");
@@ -114,7 +92,6 @@ public class Config
             config.AddDefaultApps();
             Log.Write($"Helper apps set up: {string.Join(", ", config.Apps.Select(a => a.Name))}");
         }
-        else config.RepointMovedApps();
         config.Save();
         return config;
     }
