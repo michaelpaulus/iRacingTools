@@ -22,7 +22,7 @@ static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"Crash: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) => { Log.Write($"Background error: {e.Exception}"); e.SetObserved(); };
 
-        Startup.MigrateFromHubPower();
+        Startup.KeepCurrent();
         ApplicationConfiguration.Initialize();
         bool showWindow = !args.Contains("--tray", StringComparer.OrdinalIgnoreCase);
         Application.Run(new TrayApp(showEvent, showWindow));

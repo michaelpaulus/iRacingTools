@@ -16,9 +16,9 @@ highlights-video maker, and a tray app that ties them together.
 
 1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 2. Clone this repo, then run any app from its folder with its `run.cmd` (see each README).
-3. Install the command center with `IRacingCommandCenter\install.cmd`: it builds it, copies it to
-   `%LOCALAPPDATA%\Programs\IRacingCommandCenter`, adds a Start menu shortcut and starts it. It finds the apps in
-   this folder.
+3. Start the command center with `IRacingCommandCenter\run.cmd`: it builds it and runs it from its build output
+   (`bin\Release`), where it finds the other apps in this folder. Tick *Start with Windows* in its tray menu to have it
+   start on its own. To update it after a change, exit it from the tray and run `run.cmd` again.
 
 ## What isn't in the repo, and where it comes from
 

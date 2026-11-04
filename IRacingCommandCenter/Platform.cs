@@ -7,34 +7,8 @@ public static class Startup
 {
     const string Key = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string Name = "iRacingCommandCenter";
-    const string OldName = "iRacingHubPower";
 
-    /// <summary>
-    /// First run after the rename: carries over HubPower's settings folder, and swaps its "start with Windows" entry
-    /// for this exe.
-    /// </summary>
-    public static void MigrateFromHubPower()
-    {
-        try
-        {
-            var oldDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "iRacingHubPower");
-            var oldConfig = Path.Combine(oldDir, "config.json");
-            if (!File.Exists(Config.FilePath) && File.Exists(oldConfig))
-            {
-                Directory.CreateDirectory(Config.Dir);
-                File.Copy(oldConfig, Config.FilePath);
-                Log.Write($"Settings copied from {oldDir}");
-            }
-            using var key = Registry.CurrentUser.CreateSubKey(Key);
-            if (key.GetValue(OldName) != null)
-            {
-                key.DeleteValue(OldName, throwOnMissingValue: false);
-                key.SetValue(Name, $"\"{Environment.ProcessPath}\" --tray");
-                Log.Write("Start with Windows moved from HubPower to the command center");
-            }
-        }
-        catch (Exception ex) { Log.Write($"Migration from HubPower failed: {ex.Message}"); }
-    }
+    static string Command => $"\"{Environment.ProcessPath}\" --tray";
 
     public static bool IsEnabled
     {
@@ -48,7 +22,25 @@ public static class Startup
     public static void Set(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(Key);
-        if (enabled) key.SetValue(Name, $"\"{Environment.ProcessPath}\" --tray");
+        if (enabled) key.SetValue(Name, Command);
         else key.DeleteValue(Name, throwOnMissingValue: false);
+    }
+
+    /// <summary>
+    /// When "start with Windows" is on but names another exe (it was run from somewhere else before, such as an
+    /// installed copy), point it at this one, so Windows starts the build you're running.
+    /// </summary>
+    public static void KeepCurrent()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(Key, writable: true);
+            if (key?.GetValue(Name) is string current && !current.Equals(Command, StringComparison.OrdinalIgnoreCase))
+            {
+                key.SetValue(Name, Command);
+                Log.Write($"Start with Windows now runs {Environment.ProcessPath}");
+            }
+        }
+        catch (Exception ex) { Log.Write($"Couldn't update start with Windows: {ex.Message}"); }
     }
 }
