@@ -32,6 +32,7 @@ public class TrayApp : ApplicationContext
     bool _restorePending;         // the plug restarted and its outlets aren't back to what we set yet
     int _ticks;
     bool _tickBusy;
+    string? _missingWarning;
 
     public TrayApp(EventWaitHandle showEvent, bool showWindow)
     {
@@ -103,6 +104,17 @@ public class TrayApp : ApplicationContext
 
     public async Task<bool> SwitchAsync(IReadOnlyCollection<int> ports, bool on)
     {
+        // Skip outlets the plug doesn't have (config.json from an older plug with more outlets): switching one fails,
+        // which would fail every switch, including the outlets that do exist.
+        if (Outlets.Count > 0 && ports.Where(p => Find(p) == null).ToArray() is { Length: > 0 } missing)
+        {
+            var warning = $"The plug has no outlet {string.Join(",", missing)}: skipped (remove it from outlets in config.json)";
+            if (warning != _missingWarning) Log.Write(warning);
+            _missingWarning = warning;
+            ports = ports.Except(missing).ToArray();
+            if (ports.Count == 0) return true;
+        }
+
         bool ok = true;
         await _stripLock.WaitAsync();
         try
@@ -286,7 +298,10 @@ public class TrayApp : ApplicationContext
                 OneDrive.Resume();
             }
             _simWasRunning = simRunning;
-            if (Config.Auto && DateTime.Now >= _retryAfter)
+            // While waiting out a failed switch, leave _wasRunning alone: recording a start or stop here would
+            // lose it, and the outlets would never follow it.
+            bool waiting = Config.Auto && DateTime.Now < _retryAfter;
+            if (Config.Auto && !waiting)
             {
                 if (running == true && _wasRunning != true)
                 {
@@ -307,7 +322,7 @@ public class TrayApp : ApplicationContext
                     if (await SwitchAsync(Config.Outlets, false)) _stoppedAt = null;
                 }
             }
-            _wasRunning = running;
+            if (!waiting) _wasRunning = running;
 
             // re-read the plug every 15s while the window is open, every minute otherwise
             _ticks++;
