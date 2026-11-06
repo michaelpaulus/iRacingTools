@@ -229,14 +229,28 @@ public class TrayApp : ApplicationContext
     }
 
     /// <summary>Driver swap from the tray or the window. Shows progress and problems as tray balloons.</summary>
-    public Task<bool> SwapDriverAsync(string name) =>
-        RunDriverActionAsync(p => Drivers.SwapToAsync(name, p), $"Signed in as {name}: click Join, then Drive.");
+    public Task<bool> SwapDriverAsync(string name)
+    {
+        string? joined = null;
+        return RunDriverActionAsync(async p =>
+        {
+            await Drivers.SwapToAsync(name, p);
+            if (!Config.AutoJoin) return;
+            p.Report($"Signed in as {name}: waiting for the Join button...");
+            joined = await AutoJoin.PressAsync(Config.JoinButtons, TimeSpan.FromSeconds(Config.JoinWaitSeconds));
+            if (joined == null) Log.Write($"Driver swap: no {string.Join(" / ", Config.JoinButtons)} button within {Config.JoinWaitSeconds}s");
+        }, () => joined != null
+            ? $"Signed in as {name} and pressed {joined}: click Drive when the sim loads."
+            : Config.AutoJoin
+                ? $"Signed in as {name}, but no Join button showed up: click Join, then Drive."
+                : $"Signed in as {name}: click Join, then Drive.");
+    }
 
     /// <summary>Adds a driver: opens the iRacing app on an empty profile for them to sign in once.</summary>
     public Task<bool> AddDriverAsync(string name) =>
-        RunDriverActionAsync(p => Drivers.AddAsync(name, p), $"Sign in as {name} in the iRacing app. That sign-in is kept for swaps.");
+        RunDriverActionAsync(p => Drivers.AddAsync(name, p), () => $"Sign in as {name} in the iRacing app. That sign-in is kept for swaps.");
 
-    async Task<bool> RunDriverActionAsync(Func<IProgress<string>, Task> action, string done)
+    async Task<bool> RunDriverActionAsync(Func<IProgress<string>, Task> action, Func<string> doneMessage)
     {
         if (Swapping) return false;
         Swapping = true;
@@ -245,6 +259,7 @@ public class TrayApp : ApplicationContext
         try
         {
             await action(progress);
+            var done = doneMessage();
             _form.SetDriverStatus(done);
             _tray.ShowBalloonTip(5000, "Driver swap", done, ToolTipIcon.Info);
             return true;

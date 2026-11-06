@@ -19,6 +19,11 @@ public class Config
     public int OffDelaySeconds { get; set; } = 60;
     /// <summary>Shut OneDrive down while the sim runs and start it again when the sim closes.</summary>
     public bool PauseOneDrive { get; set; } = true;
+    /// <summary>After a driver swap, press the session's Join button in the iRacing app (exact names below).</summary>
+    public bool AutoJoin { get; set; } = true;
+    public string[] JoinButtons { get; set; } = ["Join", "Join Race", "Join Practice"];
+    /// <summary>How long to wait for the Join button after the iRacing app restarts.</summary>
+    public int JoinWaitSeconds { get; set; } = 90;
     // Before the app list existed, Crew Chief was the only helper. Only read when Apps is empty, to build the list.
     public bool LaunchCrewChief { get; set; } = true;
     public string CrewChiefPath { get; set; } = @"C:\Program Files (x86)\Britton IT Ltd\CrewChiefV4\CrewChiefV4.exe";
