@@ -10,6 +10,8 @@ public class TrayApp : ApplicationContext
     public Config Config { get; } = Config.Load();
     public HelperManager Helpers { get; }
     public OneDrivePause OneDrive { get; } = new();
+    public DriverSwap Drivers { get; } = new();
+    public bool Swapping { get; private set; }
     public List<Outlet> Outlets { get; private set; } = [];
     public string? LastError { get; private set; }
 
@@ -17,7 +19,7 @@ public class TrayApp : ApplicationContext
     readonly NotifyIcon _tray;
     readonly MainForm _form;
     readonly Dictionary<int, ToolStripMenuItem> _outletItems = [];
-    readonly ToolStripMenuItem _autoItem, _appsItem, _startupItem, _oneDriveItem, _spanItem;
+    readonly ToolStripMenuItem _autoItem, _appsItem, _driverItem, _startupItem, _oneDriveItem, _spanItem;
     readonly System.Windows.Forms.Timer _poll;
     readonly SemaphoreSlim _stripLock = new(1, 1);
     readonly RegisteredWaitHandle _showWait;
@@ -35,6 +37,7 @@ public class TrayApp : ApplicationContext
     string? _missingWarning;
     readonly HashSet<int> _userOff = []; // outlets you turned off yourself: the keep-on check leaves them off
     bool _failSafeDone;                  // the plug's own fail-safe settings have been checked
+    DateTime _holdPowerUntil = DateTime.MinValue; // a driver swap closes the iRacing app briefly: keep the rig powered
 
     public TrayApp(EventWaitHandle showEvent, bool showWindow)
     {
@@ -72,6 +75,24 @@ public class TrayApp : ApplicationContext
         };
         _appsItem.DropDownItems.Add("(loading)");
         menu.Items.Add(_appsItem);
+        // Driver submenu: who is signed in to the iRacing app (ticked); click another driver to swap.
+        _driverItem = new ToolStripMenuItem("Driver");
+        _driverItem.DropDownOpening += (_, _) =>
+        {
+            _driverItem.DropDownItems.Clear();
+            var current = Drivers.Current;
+            foreach (var name in Drivers.Drivers)
+            {
+                var n = name;
+                bool isCurrent = n.Equals(current, StringComparison.OrdinalIgnoreCase);
+                _driverItem.DropDownItems.Add(new ToolStripMenuItem(isCurrent ? n : $"Swap to {n}", null, async (_, _) => await SwapDriverAsync(n))
+                    { Checked = isCurrent, Enabled = !isCurrent && !Swapping });
+            }
+            if (Drivers.Drivers.Count > 0) _driverItem.DropDownItems.Add(new ToolStripSeparator());
+            _driverItem.DropDownItems.Add("Drivers...", null, (_, _) => { ShowWindow(); _form.ShowDrivers(); });
+        };
+        _driverItem.DropDownItems.Add("(loading)");
+        menu.Items.Add(_driverItem);
         menu.Items.Add(new ToolStripSeparator());
         _autoItem = new ToolStripMenuItem("Automatic power (follow iRacing)", null, (_, _) => SetAuto(!Config.Auto));
         _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => { Startup.Set(!Startup.IsEnabled); UpdateUi(); });
@@ -207,6 +228,41 @@ public class TrayApp : ApplicationContext
         finally { _restoring = false; }
     }
 
+    /// <summary>Driver swap from the tray or the window. Shows progress and problems as tray balloons.</summary>
+    public Task<bool> SwapDriverAsync(string name) =>
+        RunDriverActionAsync(p => Drivers.SwapToAsync(name, p), $"Signed in as {name}: click Join, then Drive.");
+
+    /// <summary>Adds a driver: opens the iRacing app on an empty profile for them to sign in once.</summary>
+    public Task<bool> AddDriverAsync(string name) =>
+        RunDriverActionAsync(p => Drivers.AddAsync(name, p), $"Sign in as {name} in the iRacing app. That sign-in is kept for swaps.");
+
+    async Task<bool> RunDriverActionAsync(Func<IProgress<string>, Task> action, string done)
+    {
+        if (Swapping) return false;
+        Swapping = true;
+        _holdPowerUntil = DateTime.Now.AddMinutes(3);
+        var progress = new Progress<string>(m => { _form.SetDriverStatus(m); });
+        try
+        {
+            await action(progress);
+            _form.SetDriverStatus(done);
+            _tray.ShowBalloonTip(5000, "Driver swap", done, ToolTipIcon.Info);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Driver swap failed: {ex.Message}");
+            _form.SetDriverStatus(ex.Message);
+            _tray.ShowBalloonTip(8000, "Driver swap", ex.Message, ToolTipIcon.Warning);
+            return false;
+        }
+        finally
+        {
+            Swapping = false;
+            UpdateUi();
+        }
+    }
+
     public void SetAuto(bool on)
     {
         Config.Auto = on;
@@ -304,6 +360,9 @@ public class TrayApp : ApplicationContext
         try
         {
             bool? running = Config.Processes.Concat(Config.OtherSims).Any(p => Process.GetProcessesByName(p).Length > 0);
+            // During a driver swap the iRacing app is closed for a few seconds: that isn't iRacing stopping.
+            if (running == false && (Swapping || DateTime.Now < _holdPowerUntil)) running = true;
+            else if (running == true && !Swapping) _holdPowerUntil = DateTime.MinValue;
             if (Config.SpanWindows) TripleSpan.Apply(Config.SpanProcesses);
             // Helper apps follow the sim itself (not the launcher).
             bool simRunning = Config.AppProcesses.Any(p => Process.GetProcessesByName(p).Length > 0);

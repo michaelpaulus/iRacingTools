@@ -14,6 +14,9 @@ public class MainForm : Form
     readonly Panel _appsPanel;
     readonly Button _addApp, _guide, _refLaps;
     readonly int _appsTop;
+    readonly Label _driverNow, _driverStatus;
+    readonly FlowLayoutPanel _swapButtons;
+    string _swapKey = "";
 
     /// <summary>Closing the window just hides it to the tray unless the app is exiting.</summary>
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
@@ -31,6 +34,17 @@ public class MainForm : Form
         Font = new Font("Segoe UI", 9F);
 
         int y = 10;
+        Controls.Add(Heading("Driver", y));
+        y += 26;
+        _driverNow = new Label { Left = 15, Top = y + 7, Width = 200, AutoEllipsis = true };
+        _swapButtons = new FlowLayoutPanel { Left = 220, Top = y, Width = 390, Height = 34, WrapContents = false };
+        var manage = new Button { Left = 620, Top = y, Width = 110, Height = 30, Text = "Drivers..." };
+        manage.Click += (_, _) => ShowDrivers();
+        y += 36;
+        _driverStatus = new Label { Left = 15, Top = y, Width = AppsWidth - 30, Height = 20, ForeColor = Color.DimGray, AutoEllipsis = true };
+        Controls.AddRange([_driverNow, _swapButtons, manage, _driverStatus]);
+        y += 30;
+
         Controls.Add(Heading("Power", y));
         y += 26;
         foreach (var port in app.Config.Outlets)
@@ -95,6 +109,41 @@ public class MainForm : Form
 
     const int AppsWidth = 745, AppRowHeight = 34;
     readonly ToolTip _tips = new();
+
+    public void ShowDrivers()
+    {
+        using var dialog = new DriversDialog(_app);
+        dialog.ShowDialog(this);
+        UpdateView();
+    }
+
+    public void SetDriverStatus(string text)
+    {
+        _driverStatus.Text = text;
+        UpdateView();
+    }
+
+    /// <summary>The driver row: who's signed in, and a swap button for each other driver (rebuilt only when that changes).</summary>
+    void UpdateDrivers()
+    {
+        var current = _app.Drivers.Current;
+        var others = _app.Drivers.Drivers.Where(d => !d.Equals(current, StringComparison.OrdinalIgnoreCase)).ToList();
+        _driverNow.Text = current is null ? "Signed in: (not named yet)" : $"Signed in: {current}";
+        var key = $"{current}|{string.Join("|", others)}|{_app.Swapping}";
+        if (key == _swapKey) return;
+        _swapKey = key;
+        _swapButtons.Controls.Clear();
+        foreach (var other in others)
+        {
+            var name = other;
+            var b = new Button { Width = 180, Height = 30, Text = $"Swap to {name}", Enabled = !_app.Swapping, Font = new Font(Font, FontStyle.Bold) };
+            b.Click += async (_, _) => await Busy(() => _app.SwapDriverAsync(name));
+            _swapButtons.Controls.Add(b);
+        }
+        if (others.Count == 0)
+            _swapButtons.Controls.Add(new Label { Width = 380, Height = 30, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DimGray,
+                Text = "Add a second driver under Drivers... to swap" });
+    }
 
     public void ShowGuide()
     {
@@ -218,6 +267,7 @@ public class MainForm : Form
             withIRacing.Checked = a.StartWithIRacing;
         }
         _status.Text = _app.StatusText;
+        UpdateDrivers();
     }
 
     async Task Busy(Func<Task> action)

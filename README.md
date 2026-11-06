@@ -9,7 +9,7 @@ highlights-video maker, and a tray app that ties them together.
 | [IRacingVoice](IRacingVoice/README.md) | Push-to-talk voice agent: pit stop changes, fuel, questions about the race, corner coaching |
 | [IRacingCoach](IRacingCoach/README.md) | Live corner coaching against a reference lap, plus a race engineer powered by Claude |
 | [IRacingBroadcast](IRacingBroadcast/README.md) | Turns a race replay into a narrated highlights video |
-| IRacingCommandCenter | Tray app: switches the rig's power (a Shelly smart plug) with iRacing, starts and stops the other apps, pauses OneDrive while you race |
+| IRacingCommandCenter | Tray app: switches the rig's power (a Shelly smart plug) with iRacing, starts and stops the other apps, pauses OneDrive while you race, and swaps the iRacing sign-in between drivers sharing the rig (team race pit stops) |
 | IRacingOverlays.Tests | Tests for the overlays (`dotnet test IRacingOverlays.Tests`) |
 
 ## Getting started
