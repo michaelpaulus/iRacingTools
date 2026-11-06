@@ -33,6 +33,8 @@ public class TrayApp : ApplicationContext
     int _ticks;
     bool _tickBusy;
     string? _missingWarning;
+    readonly HashSet<int> _userOff = []; // outlets you turned off yourself: the keep-on check leaves them off
+    bool _failSafeDone;                  // the plug's own fail-safe settings have been checked
 
     public TrayApp(EventWaitHandle showEvent, bool showWindow)
     {
@@ -102,7 +104,8 @@ public class TrayApp : ApplicationContext
 
     // ---- actions used by the menu and window
 
-    public async Task<bool> SwitchAsync(IReadOnlyCollection<int> ports, bool on)
+    /// <param name="byUser">false for the automatic switching; a user's own "off" while racing is respected by the keep-on check.</param>
+    public async Task<bool> SwitchAsync(IReadOnlyCollection<int> ports, bool on, bool byUser = true)
     {
         // Skip outlets the plug doesn't have (config.json from an older plug with more outlets): switching one fails,
         // which would fail every switch, including the outlets that do exist.
@@ -120,14 +123,20 @@ public class TrayApp : ApplicationContext
         try
         {
             await _strip.SetAsync(ports, on);
-            foreach (var port in ports) _desired[port] = on;
-            Log.Write($"Outlets {string.Join(",", ports)} {(on ? "ON" : "OFF")}");
+            foreach (var port in ports)
+            {
+                _desired[port] = on;
+                if (byUser && on) _userOff.Remove(port);
+                else if (byUser) _userOff.Add(port);
+            }
+            Log.Write($"Outlets {string.Join(",", ports)} {(on ? "ON" : "OFF")}{(byUser ? " (by you)" : "")}");
         }
         catch (Exception ex)
         {
             ok = false;
             Fail(ex);
-            _retryAfter = DateTime.Now.AddSeconds(30);
+            // power on is retried quickly; a failed off can wait
+            _retryAfter = DateTime.Now.AddSeconds(on ? 5 : 30);
             _tray.ShowBalloonTip(5000, "iRacing Command Center", ex.Message, ToolTipIcon.Error);
         }
         finally { _stripLock.Release(); }
@@ -153,6 +162,16 @@ public class TrayApp : ApplicationContext
                 else if (up < _lastUptime) { _restorePending = true; Log.Write($"Plug restarted (up {up:hh\\:mm\\:ss})"); }
                 _lastUptime = up;
             }
+            if (!_failSafeDone)
+            {
+                try
+                {
+                    var mine = Outlets.Select(o => o.Port).Intersect(Config.Outlets).ToList();
+                    foreach (var change in await _strip.EnsureFailSafeAsync(mine)) Log.Write(change);
+                    _failSafeDone = true;
+                }
+                catch (Exception ex) { Log.Write($"Couldn't check the plug's fail-safe settings (trying again later): {ex.Message}"); }
+            }
         }
         catch (Exception ex) { Fail(ex); }
         finally { _stripLock.Release(); }
@@ -172,6 +191,7 @@ public class TrayApp : ApplicationContext
         {
             var changed = _desired
                 .Where(kv => Find(kv.Key) is { } o && o.On != kv.Value)
+                .Where(kv => kv.Value || _wasRunning != true) // never put power back OFF while a sim is running
                 .GroupBy(kv => kv.Value, kv => kv.Key)
                 .Select(g => (On: g.Key, Ports: g.ToArray()))
                 .ToList();
@@ -179,7 +199,7 @@ public class TrayApp : ApplicationContext
             foreach (var (on, ports) in changed)
             {
                 Log.Write($"Restoring outlets {string.Join(",", ports)} {(on ? "ON" : "OFF")} after plug restart");
-                allOk &= await SwitchAsync(ports, on);
+                allOk &= await SwitchAsync(ports, on, byUser: false);
             }
             if (allOk) _restorePending = false;
             else Log.Write("Restore failed; trying again at the next check");
@@ -306,11 +326,19 @@ public class TrayApp : ApplicationContext
                 if (running == true && _wasRunning != true)
                 {
                     _stoppedAt = null;
-                    if (!await SwitchAsync(Config.Outlets, true)) running = null; // retry next tick
+                    _userOff.Clear();
+                    if (!await SwitchAsync(Config.Outlets, true, byUser: false)) running = null; // retry next tick
+                }
+                else if (running == true && Outlets.Count > 0
+                    && Config.Outlets.Where(p => !_userOff.Contains(p) && Find(p) is { On: false }).ToArray() is { Length: > 0 } offNow)
+                {
+                    // Keep power on while racing: something else (the Shelly app, a plug reboot) turned it off.
+                    Log.Write($"Outlets {string.Join(",", offNow)} found OFF while a sim is running; turning back on");
+                    await SwitchAsync(offNow, true, byUser: false);
                 }
                 else if (running == false && _wasRunning == null)
                 {
-                    if (!await SwitchAsync(Config.Outlets, false)) running = null; // sync at startup
+                    if (!await SwitchAsync(Config.Outlets, false, byUser: false)) running = null; // sync at startup
                 }
                 else if (running == false && _wasRunning == true)
                 {
@@ -319,14 +347,14 @@ public class TrayApp : ApplicationContext
 
                 if (running == false && _stoppedAt is DateTime t && (DateTime.Now - t).TotalSeconds >= Config.OffDelaySeconds)
                 {
-                    if (await SwitchAsync(Config.Outlets, false)) _stoppedAt = null;
+                    if (await SwitchAsync(Config.Outlets, false, byUser: false)) _stoppedAt = null;
                 }
             }
             if (!waiting) _wasRunning = running;
 
-            // re-read the plug every 15s while the window is open, every minute otherwise
+            // re-read the plug every 15s while the window is open or a sim runs (the keep-on check), every minute otherwise
             _ticks++;
-            int every = _form.Visible ? 15 : 60;
+            int every = _form.Visible || _wasRunning == true ? 15 : 60;
             if (_ticks * Config.PollSeconds % every < Config.PollSeconds) await RefreshAsync();
             else UpdateUi();
         }

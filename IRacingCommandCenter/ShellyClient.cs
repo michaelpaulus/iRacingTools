@@ -27,6 +27,29 @@ public class ShellyClient(Config config)
         return true;
     });
 
+    /// <summary>
+    /// Fail-safe settings on the plug itself, so power doesn't depend on this PC: after a power cut or reboot each
+    /// outlet comes back ON, no auto-off timer, and a voltage spike doesn't leave it off. Returns what was changed.
+    /// </summary>
+    public Task<List<string>> EnsureFailSafeAsync(IReadOnlyCollection<int> ports) => WithClientAsync(async http =>
+    {
+        var changes = new List<string>();
+        foreach (var port in ports)
+        {
+            using var cfg = await RpcAsync(http, $"Switch.GetConfig?id={port - 1}");
+            var r = cfg.RootElement;
+            bool hasVoltage = r.TryGetProperty("autorecover_voltage_errors", out var av);
+            bool good = r.TryGetProperty("initial_state", out var s) && s.GetString() == "on"
+                && !(r.TryGetProperty("auto_off", out var ao) && ao.ValueKind == JsonValueKind.True)
+                && !(hasVoltage && av.ValueKind == JsonValueKind.False);
+            if (good) continue;
+            var json = "{\"initial_state\":\"on\",\"auto_off\":false" + (hasVoltage ? ",\"autorecover_voltage_errors\":true" : "") + "}";
+            using var set = await RpcAsync(http, $"Switch.SetConfig?id={port - 1}&config={Uri.EscapeDataString(json)}");
+            changes.Add($"Outlet {port} set fail-safe on the plug: on after a power cut, no auto-off, recovers from voltage errors");
+        }
+        return changes;
+    });
+
     public Task<List<Outlet>> GetAsync() => WithClientAsync(async http =>
     {
         using var status = await RpcAsync(http, "Shelly.GetStatus");
@@ -77,6 +100,15 @@ public class ShellyClient(Config config)
             catch (PingException) { }
         }
 
+        // A missed ping isn't proof it's gone (Wi-Fi power saving drops pings): ask the plug itself before scanning.
+        try
+        {
+            using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var doc = JsonDocument.Parse(await probe.GetStringAsync($"http://{config.Ip}/shelly"));
+            if (doc.RootElement.TryGetProperty("mac", out var m) && Bare(m.GetString() ?? "") == Bare(config.Mac)) return config.Ip;
+        }
+        catch { /* not answering there: look for it by MAC */ }
+
         var prefix = string.Join('.', config.Ip.Split('.').Take(3));
         await Task.WhenAll(Enumerable.Range(1, 254).Select(async i =>
         {
@@ -101,6 +133,8 @@ public class ShellyClient(Config config)
         }
         return ip;
     }
+
+    static string Bare(string mac) => mac.Replace(":", "").Replace("-", "").ToUpperInvariant();
 
     static DateTime _lastScan = DateTime.MinValue;
 
